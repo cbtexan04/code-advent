@@ -37,6 +37,30 @@ func solvePart1(inputs []int) (int, error) {
 	return sum, nil
 }
 
+func solvePart2(inputs []int) int {
+	seenMap := make(map[int]bool)
+
+	var sum int
+
+Beginning:
+	for index, i := range inputs {
+		sum = sum + i
+
+		if _, ok := seenMap[sum]; ok {
+			return sum
+		} else {
+			seenMap[sum] = true
+		}
+
+		// Last one
+		if index == len(inputs)-1 {
+			goto Beginning
+		}
+	}
+
+	return sum
+}
+
 func main() {
 	file, err := os.Open(inputPath)
 	if err != nil {
@@ -49,10 +73,6 @@ func main() {
 		panic(err)
 	}
 
-	result, err := solvePart1(inputs)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(result)
+	fmt.Println(solvePart1(inputs))
+	fmt.Println(solvePart2(inputs))
 }
