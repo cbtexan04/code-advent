@@ -11,17 +11,26 @@ import (
 
 const inputPath = "input.txt"
 
-func solvePart1(input io.Reader) (int, error) {
-	var sum int
+func readerToInputs(input io.Reader) ([]int, error) {
+	var newInputs []int
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := strings.TrimPrefix(scanner.Text(), "+")
 
 		i, err := strconv.Atoi(line)
 		if err != nil {
-			return i, err
+			return newInputs, err
 		}
 
+		newInputs = append(newInputs, i)
+	}
+
+	return newInputs, nil
+}
+
+func solvePart1(inputs []int) (int, error) {
+	var sum int
+	for _, i := range inputs {
 		sum = sum + i
 	}
 
@@ -35,7 +44,12 @@ func main() {
 	}
 	defer file.Close()
 
-	result, err := solve(file)
+	inputs, err := readerToInputs(file)
+	if err != nil {
+		panic(err)
+	}
+
+	result, err := solvePart1(inputs)
 	if err != nil {
 		panic(err)
 	}
