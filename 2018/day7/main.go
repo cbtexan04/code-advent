@@ -8,221 +8,81 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 const inputPath = "input.txt"
 
 var NodeRE = regexp.MustCompile("Step ([a-zA-Z]) must be finished before step ([a-zA-Z]) can begin")
 
-type Node struct {
-	Name     rune
-	Children []*Node
-	Parents  []*Node
-}
+func solve(m map[rune]map[rune]bool) (string, error) {
+	steps := []string{}
 
-type Tree struct {
-	Nodes []*Node
-}
+	for len(m) > 0 {
+		var availableNodes []string
 
-type NodeSlice []*Node
-
-func (n NodeSlice) Len() int {
-	return len(n)
-}
-
-func (n NodeSlice) Less(i, j int) bool {
-	return n[i].Name < n[j].Name
-}
-
-func (n NodeSlice) Swap(i, j int) {
-	n[i], n[j] = n[j], n[i]
-}
-
-func (n *Node) Exists(t *Tree) bool {
-	for _, nn := range t.Nodes {
-		if nn.Name == n.Name {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (n *Node) HasParent(r rune) bool {
-	for _, nn := range n.Parents {
-		if nn.Name == r {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (n *Node) HasChild(r rune) bool {
-	for _, nn := range n.Children {
-		if nn.Name == r {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (t *Tree) HasNodeName(r rune) bool {
-	for _, n := range t.Nodes {
-		if n.Name == r {
-			return true
-		}
-	}
-
-	return false
-}
-
-func (t *Tree) GetNodeName(r rune) *Node {
-	for _, n := range t.Nodes {
-		if n.Name == r {
-			return n
-		}
-	}
-
-	return nil
-}
-
-func NewTree() *Tree {
-	t := &Tree{
-		Nodes: make([]*Node, 0),
-	}
-
-	return t
-}
-
-func (t *Tree) Update(n *Node) {
-	for _, curNode := range t.Nodes {
-		if curNode.Name == n.Name {
-			curNode.Children = n.Children
-			curNode.Parents = n.Parents
-			return
-		}
-	}
-
-	// Otherwise, no match, we'll just add it to our nodes
-	t.Nodes = append(t.Nodes, n)
-}
-
-func (t *Tree) Insert(line string) error {
-	matches := NodeRE.FindStringSubmatch(line)
-	if len(matches) != 3 || len(matches[1]) != 1 || len(matches[2]) != 1 {
-		return errors.New("invalid line")
-	}
-
-	parent := rune(matches[1][0])
-	child := rune(matches[2][0])
-
-	parentNode := t.GetNodeName(parent)
-	if parentNode == nil {
-		parentNode = &Node{
-			Name:     parent,
-			Children: make([]*Node, 0),
-		}
-	}
-
-	childNode := t.GetNodeName(child)
-	if childNode == nil {
-		childNode = &Node{
-			Name:     child,
-			Children: make([]*Node, 0),
-		}
-	}
-
-	// Update child and parents so they refer to each other
-	if !parentNode.HasChild(child) {
-		parentNode.Children = append(parentNode.Children, childNode)
-	}
-
-	if !childNode.HasParent(parent) {
-		childNode.Parents = append(childNode.Parents, parentNode)
-	}
-
-	t.Update(parentNode)
-	t.Update(childNode)
-
-	return nil
-}
-
-func solve(t *Tree) (string, error) {
-	// Step1: find the node without any parents
-	sort.Sort(NodeSlice(t.Nodes))
-
-	var startingNode *Node
-	for _, n := range t.Nodes {
-		if len(n.Parents) == 0 {
-			startingNode = n
-			break
-		}
-	}
-
-	if startingNode == nil {
-		return "", errors.New("could not find starting node")
-	}
-
-	// Let's us know if we've used the rune yet
-	m := make(map[rune]bool)
-	m[startingNode.Name] = true
-
-	// Available nodes to pick from
-	availableChoices := NodeSlice(startingNode.Children)
-
-	// Keep track of our solution
-	var solution string
-	solution += string(startingNode.Name)
-
-Beginning:
-	// Sort the array by name, so we iterate in order
-	sort.Sort(availableChoices)
-
-	for _, n := range availableChoices {
-		// if we've seen this node before, we can skip it
-		if _, ok := m[n.Name]; ok {
-			continue
-		}
-
-		// Have to make sure all parents have been seen
-		var parentsSeen int
-		for _, p := range n.Parents {
-			fmt.Printf("%s has parent %s\n", string(n.Name), string(p.Name))
-			if _, ok := m[p.Name]; !ok {
-				continue
+		// Find our nodes which don't have any dependencies
+		for r, deps := range m {
+			if len(deps) == 0 {
+				availableNodes = append(availableNodes, string(r))
 			}
-			parentsSeen++
 		}
 
-		if parentsSeen != len(n.Parents) {
-			continue
+		sort.Slice(availableNodes, func(i, j int) bool {
+			return rune(availableNodes[i][0]) < rune(availableNodes[j][0])
+		})
+
+		if len(availableNodes) == 0 {
+			return "", errors.New("unable to solve puzzle")
 		}
 
-		solution += string(n.Name)
-		availableChoices = append(availableChoices, n.Children...)
-		m[n.Name] = true
+		// Our first node can be used as the next step
+		nextStep := availableNodes[0]
+		steps = append(steps, nextStep)
 
-		goto Beginning
+		// We need to remove this dep from any other node
+		for key, deps := range m {
+			for k, _ := range deps {
+				if string(k) == nextStep {
+					delete(m[key], k)
+				}
+			}
+		}
+
+		// Also remove it from the top level map so we don't do it again
+		delete(m, rune(availableNodes[0][0]))
 	}
 
-	return solution, nil
+	return strings.Join(steps, ""), nil
 }
 
-func gatherInputs(input io.Reader) (*Tree, error) {
-	tree := NewTree()
+func gatherInputs(input io.Reader) (map[rune]map[rune]bool, error) {
+	m := make(map[rune]map[rune]bool)
 
 	scanner := bufio.NewScanner(input)
 	for scanner.Scan() {
 		line := scanner.Text()
-		err := tree.Insert(line)
-		if err != nil {
-			return nil, err
+
+		matches := NodeRE.FindStringSubmatch(line)
+		if len(matches) != 3 || len(matches[1]) != 1 || len(matches[2]) != 1 {
+			return m, errors.New("invalid line")
 		}
+
+		dependency := rune(matches[1][0])
+		node := rune(matches[2][0])
+
+		if _, ok := m[dependency]; !ok {
+			m[dependency] = make(map[rune]bool)
+		}
+
+		if _, ok := m[node]; !ok {
+			m[node] = make(map[rune]bool)
+		}
+
+		m[node][dependency] = true
 	}
 
-	return tree, nil
+	return m, nil
 }
 
 func main() {
@@ -232,12 +92,12 @@ func main() {
 	}
 	defer file.Close()
 
-	tree, err := gatherInputs(file)
+	m, err := gatherInputs(file)
 	if err != nil {
 		panic(err)
 	}
 
-	result, err := solve(tree)
+	result, err := solve(m)
 	if err != nil {
 		panic(err)
 	}
